@@ -1,0 +1,11 @@
+{
+  "name": "nfc-food-stall-venue-management-and-online-ecommerce",
+  "version": "1.0.0",
+  "description": "NFC card enabled payment and sales food stall management api with online ecommerce ordering functionality.",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ashiqur Rahman Zeeshan",
+  "license": "MIT"
+}
