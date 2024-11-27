@@ -37,6 +37,12 @@ const customerSchema = new mongoose.Schema(
       type: String,
       match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please provide a valid email'],
       sparse: true,
+      unique: true,
+    },
+    password: {
+      type: String,
+      required: [true, 'please provide a password'],
+      minlength: 6,
     },
     cardUid: { type: String, required: false },
     moneyLeft: { type: Number, default: 0, min: 0 },
@@ -45,6 +51,18 @@ const customerSchema = new mongoose.Schema(
       type: String,
       enum: ['nfc', 'online'],
       required: true,
+    },
+    otp: {
+      type: Number,
+      default: null,
+    },
+    otpExpires: {
+      type: Date,
+      default: null,
+    },
+    isPhoneVerified: {
+      type: Boolean,
+      default: false,
     },
     addresses: [addressSchema],
     rechargeHistory: [rechargeHistorySchema],

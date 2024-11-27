@@ -6,9 +6,12 @@ const helmet = require('helmet')
 const { xss } = require('express-xss-sanitizer')
 const mongoSanitize = require('express-mongo-sanitize')
 
-const port = process.env.PORT || 3000
+const port = process.env.PORT || 5000
 
 require('dotenv').config()
+
+const onlineAuth = require('./routes/online-customer-auth.routes')
+const onlineProfile = require('./routes/online-customer-profile.routes')
 
 const connectDB = require('./utils/db')
 // const errorHandler = require('./utils/error-handler')
@@ -22,9 +25,12 @@ app.use(mongoSanitize())
 app.use(morgan('short'))
 app.use(express.json())
 
-app.get('/api/v1/showme', authenticateUser, (req, res) => {
+app.get('/api/showme', authenticateUser, (req, res) => {
   res.json(req.user)
 })
+
+app.use('/api', onlineAuth)
+app.use('/api', onlineProfile)
 
 // app.use(notFoundError)
 // app.use(errorHandler)

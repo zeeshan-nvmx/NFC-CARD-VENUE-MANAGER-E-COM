@@ -31,7 +31,7 @@ const UserSchema = new mongoose.Schema({
   role: {
     type: String,
     enum: ['masterAdmin', 'rechargerAdmin', 'recharger', 'stallAdmin', 'stallCashier', 'onlineCustomer'],
-    default: 'onlineCustomer',
+    default: 'user',
   },
   otp: {
     type: Number,

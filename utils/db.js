@@ -1,7 +1,5 @@
 const mongoose = require('mongoose')
 
-mongoose.set('strictQuery', false)
-
 const connectDB = async (url) => {
   try {
     await mongoose.connect(url)
