@@ -11,6 +11,8 @@ async function authenticateUser(req, res, next) {
     const token = authHeader.split(' ')[1]
     const verifiedToken = await verifyToken(token)
 
+    console.log(verifiedToken)
+
     if (verifiedToken.customerType === 'online') {
       return res.status(401).json({ message: 'Invalid access token for this route' })
     }
