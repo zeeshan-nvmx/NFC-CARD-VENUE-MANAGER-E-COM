@@ -73,14 +73,16 @@ async function register(req, res) {
 
     return res.status(201).json({
       token,
-      message: `New user registered with role: ${role}`,
-      user: {
-        id: savedUser._id,
-        name: savedUser.name,
-        role: savedUser.role,
-        motherStall: savedUser.motherStall,
-        stallId: savedUser.stallId,
-      },
+      data: {
+        message: `New user registered with role: ${role}`,
+        user: {
+          id: savedUser._id,
+          name: savedUser.name,
+          role: savedUser.role,
+          motherStall: savedUser.motherStall,
+          stallId: savedUser.stallId,
+        }
+      }
     })
   } catch (error) {
     return res.status(500).json({
@@ -120,16 +122,18 @@ async function login(req, res) {
     })
 
     return res.status(200).json({
-      token,
       message: `User ${user.name} logged in successfully`,
-      user: {
-        id: user._id,
-        name: user.name,
-        phone: user.phone,
-        role: user.role,
-        motherStall: user.motherStall,
-        stallId: user.stallId,
-      },
+      data: {
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          phone: user.phone,
+          role: user.role,
+          motherStall: user.motherStall,
+          stallId: user.stallId,
+        }
+      }
     })
   } catch (error) {
     return res.status(500).json({

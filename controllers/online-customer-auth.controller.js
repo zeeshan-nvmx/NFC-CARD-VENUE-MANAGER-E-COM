@@ -51,7 +51,7 @@ async function register(req, res) {
 
     return res.status(201).json({
       message: 'Registration successful. Please verify your phone number with the OTP sent.',
-      phone,
+      data: { phone },
     })
   } catch (error) {
     return res.status(500).json({
@@ -95,12 +95,14 @@ async function verifyPhone(req, res) {
 
     return res.status(200).json({
       message: 'Phone verification successful',
-      token,
-      customer: {
-        id: customer._id,
-        name: customer.name,
-        phone: customer.phone,
-      },
+      data: {
+        token,
+        customer: {
+          id: customer._id,
+          name: customer.name,
+          phone: customer.phone,
+        }
+      }
     })
   } catch (error) {
     return res.status(500).json({
@@ -143,14 +145,16 @@ async function login(req, res) {
     })
 
     return res.status(200).json({
-      token,
       message: 'Login successful',
-      customer: {
-        id: customer._id,
-        name: customer.name,
-        phone: customer.phone,
-        customerType: customer.customerType
-      },
+      data: {
+        token,
+        customer: {
+          id: customer._id,
+          name: customer.name,
+          phone: customer.phone,
+          customerType: customer.customerType
+        }
+      }
     })
   } catch (error) {
     return res.status(500).json({
