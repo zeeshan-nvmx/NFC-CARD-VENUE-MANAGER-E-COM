@@ -35,6 +35,8 @@ app.use('/api', onlineAuth)
 app.use('/api', onlineProfile)
 app.use('/api', staffAuth)
 app.use('/api', stallRoutes)
+// product routes
+//order routes
 
 // app.use(notFoundError)
 // app.use(errorHandler)
