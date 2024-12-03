@@ -13,7 +13,9 @@ require('dotenv').config()
 const onlineAuth = require('./routes/online-customer-auth.routes')
 const onlineProfile = require('./routes/online-customer-profile.routes')
 const staffAuth = require('./routes/auth.routes')
+const customerRoutes = require('./routes/customer.routes')
 const stallRoutes = require('./routes/stall.routes')
+const orderRoutes = require('./routes/order.routes')
 
 const connectDB = require('./utils/db')
 // const errorHandler = require('./utils/error-handler')
@@ -34,7 +36,10 @@ app.get('/api/showme', authenticateUser, (req, res) => {
 app.use('/api', onlineAuth)
 app.use('/api', onlineProfile)
 app.use('/api', staffAuth)
+app.use('/api', customerRoutes)
 app.use('/api', stallRoutes)
+app.use('/api', orderRoutes)
+
 // product routes
 //order routes
 
