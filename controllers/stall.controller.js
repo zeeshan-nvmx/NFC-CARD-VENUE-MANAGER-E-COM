@@ -3,6 +3,82 @@ const mongoose = require('mongoose')
 const Stall = require('../models/stall.model')
 const { uploadToS3, deleteFromS3 } = require('../utils/image')
 
+// async function createStall(req, res) {
+//   const menuItemSchema = Joi.object({
+//     foodName: Joi.string().required(),
+//     foodPrice: Joi.number().required(),
+//     isAvailable: Joi.boolean().required(),
+//     currentStock: Joi.number().required(),
+//     description: Joi.string().allow(''),
+//     isAvailableForDelivery: Joi.boolean().default(true),
+//   })
+
+//   const stallValidationSchema = Joi.object({
+//     motherStall: Joi.string().required(),
+//     stallAdmin: Joi.string().pattern(new RegExp('^[0-9a-fA-F]{24}$')),
+//     stallCashiers: Joi.string(),
+//     menu: Joi.string(),
+//     minimumOrderAmount: Joi.number().min(0).default(0),
+//   })
+
+//   try {
+//     await stallValidationSchema.validateAsync(req.body, { abortEarly: false })
+//     let { motherStall, stallAdmin, stallCashiers, menu, minimumOrderAmount } = req.body
+
+//     // Parse JSON strings for arrays
+//     try {
+//       stallCashiers = stallCashiers ? JSON.parse(stallCashiers) : []
+//       menu = menu ? JSON.parse(menu) : []
+//     } catch (error) {
+//       return res.status(400).json({ 
+//         message: 'Invalid JSON format for stallCashiers or menu', 
+//         error: error.message 
+//       })
+//     }
+
+//     // Validate menu items after parsing
+//     for (const item of menu) {
+//       try {
+//         await menuItemSchema.validateAsync(item, { abortEarly: false })
+//       } catch (error) {
+//         return res.status(400).json({ 
+//           message: 'Invalid menu item format', 
+//           error: error.message 
+//         })
+//       }
+//     }
+
+//     let imageUrl = null
+//     let thumbnailUrl = null
+
+//     if (req.file) {
+//       const uploadResult = await uploadToS3(req.file, 'stalls')
+//       imageUrl = uploadResult.imageUrl
+//       thumbnailUrl = uploadResult.thumbnailUrl
+//     }
+
+//     const newStall = await Stall.create({
+//       motherStall,
+//       stallAdmin,
+//       stallCashiers,
+//       menu,
+//       minimumOrderAmount,
+//       imageUrl,
+//       thumbnailUrl
+//     })
+
+//     return res.status(201).json({
+//       message: 'Stall created successfully',
+//       data: newStall
+//     })
+//   } catch (error) {
+//     return res.status(400).json({
+//       message: 'Error creating stall',
+//       error: error.message
+//     })
+//   }
+// }
+
 async function createStall(req, res) {
   const menuItemSchema = Joi.object({
     foodName: Joi.string().required(),
@@ -19,42 +95,57 @@ async function createStall(req, res) {
     stallCashiers: Joi.string(),
     menu: Joi.string(),
     minimumOrderAmount: Joi.number().min(0).default(0),
+    address: Joi.object({
+      street: Joi.string().required(),
+      area: Joi.string().required(),
+      city: Joi.string().required(),
+      postalCode: Joi.string(),
+    }).required(),
+    deliveryTime: Joi.object({
+      min: Joi.number().required(),
+      max: Joi.number().required(),
+    }).required(),
   })
 
   try {
     await stallValidationSchema.validateAsync(req.body, { abortEarly: false })
-    let { motherStall, stallAdmin, stallCashiers, menu, minimumOrderAmount } = req.body
+    let { motherStall, stallAdmin, stallCashiers, menu, minimumOrderAmount, address, deliveryTime } = req.body
 
-    // Parse JSON strings for arrays
     try {
       stallCashiers = stallCashiers ? JSON.parse(stallCashiers) : []
       menu = menu ? JSON.parse(menu) : []
     } catch (error) {
-      return res.status(400).json({ 
-        message: 'Invalid JSON format for stallCashiers or menu', 
-        error: error.message 
+      return res.status(400).json({
+        message: 'Invalid JSON format for stallCashiers or menu',
+        error: error.message,
       })
     }
 
-    // Validate menu items after parsing
     for (const item of menu) {
       try {
         await menuItemSchema.validateAsync(item, { abortEarly: false })
       } catch (error) {
-        return res.status(400).json({ 
-          message: 'Invalid menu item format', 
-          error: error.message 
+        return res.status(400).json({
+          message: 'Invalid menu item format',
+          error: error.message,
         })
       }
     }
 
     let imageUrl = null
     let thumbnailUrl = null
+    let bannerUrl = null
 
-    if (req.file) {
-      const uploadResult = await uploadToS3(req.file, 'stalls')
-      imageUrl = uploadResult.imageUrl
-      thumbnailUrl = uploadResult.thumbnailUrl
+    if (req.files) {
+      if (req.files['image']) {
+        const uploadResult = await uploadToS3(req.files['image'][0], 'stalls')
+        imageUrl = uploadResult.imageUrl
+        thumbnailUrl = uploadResult.thumbnailUrl
+      }
+      if (req.files['banner']) {
+        const uploadResult = await uploadToS3(req.files['banner'][0], 'stalls/banners')
+        bannerUrl = uploadResult.imageUrl
+      }
     }
 
     const newStall = await Stall.create({
@@ -64,17 +155,20 @@ async function createStall(req, res) {
       menu,
       minimumOrderAmount,
       imageUrl,
-      thumbnailUrl
+      thumbnailUrl,
+      bannerUrl,
+      address,
+      deliveryTime,
     })
 
     return res.status(201).json({
       message: 'Stall created successfully',
-      data: newStall
+      data: newStall,
     })
   } catch (error) {
     return res.status(400).json({
       message: 'Error creating stall',
-      error: error.message
+      error: error.message,
     })
   }
 }
@@ -386,65 +480,152 @@ async function getStallMenu(req, res) {
   }
 }
 
+// async function editStall(req, res) {
+//   const { stallId } = req.params
+  
+//   try {
+//     const stall = await Stall.findById(stallId)
+//     if (!stall) {
+//       return res.status(404).json({ message: 'Stall not found' })
+//     }
+    
+//     let updates = { ...req.body }
+    
+//     // Parse JSON strings if present
+//     if (updates.stallCashiers) {
+//       try {
+//         updates.stallCashiers = JSON.parse(updates.stallCashiers)
+//       } catch (error) {
+//         return res.status(400).json({
+//           message: 'Invalid JSON format for stallCashiers',
+//           error: error.message
+//         })
+//       }
+//     }
+    
+//     if (updates.menu) {
+//       try {
+//         updates.menu = JSON.parse(updates.menu)
+//       } catch (error) {
+//         return res.status(400).json({
+//           message: 'Invalid JSON format for menu',
+//           error: error.message
+//         })
+//       }
+//     }
+    
+//     if (req.file) {
+//       if (stall.imageUrl) {
+//         const oldKey = stall.imageUrl.split('/').pop()
+//         await deleteFromS3(`stalls/${oldKey}`)
+//       }
+      
+//       const uploadResult = await uploadToS3(req.file, 'stalls')
+//       updates.imageUrl = uploadResult.imageUrl
+//       updates.thumbnailUrl = uploadResult.thumbnailUrl
+//     }
+    
+//     const updatedStall = await Stall.findByIdAndUpdate(
+//       stallId,
+//       updates,
+//       { new: true }
+//     )
+    
+//     return res.status(200).json({
+//       message: 'Stall updated successfully',
+//       data: updatedStall
+//     })
+//   } catch (error) {
+//     return res.status(400).json({
+//       message: 'Error updating stall',
+//       error: error.message
+//     })
+//   }
+// }
+
 async function editStall(req, res) {
   const { stallId } = req.params
-  
+
+  const validationSchema = Joi.object({
+    motherStall: Joi.string(),
+    stallAdmin: Joi.string().pattern(new RegExp('^[0-9a-fA-F]{24}$')),
+    stallCashiers: Joi.string(),
+    menu: Joi.string(),
+    minimumOrderAmount: Joi.number().min(0),
+    address: Joi.object({
+      street: Joi.string(),
+      area: Joi.string(),
+      city: Joi.string(),
+      postalCode: Joi.string(),
+    }),
+    deliveryTime: Joi.object({
+      min: Joi.number(),
+      max: Joi.number(),
+    }),
+  })
+
   try {
+    await validationSchema.validateAsync(req.body, { abortEarly: false })
+
     const stall = await Stall.findById(stallId)
     if (!stall) {
       return res.status(404).json({ message: 'Stall not found' })
     }
-    
+
     let updates = { ...req.body }
-    
-    // Parse JSON strings if present
+
     if (updates.stallCashiers) {
       try {
         updates.stallCashiers = JSON.parse(updates.stallCashiers)
       } catch (error) {
         return res.status(400).json({
           message: 'Invalid JSON format for stallCashiers',
-          error: error.message
+          error: error.message,
         })
       }
     }
-    
+
     if (updates.menu) {
       try {
         updates.menu = JSON.parse(updates.menu)
       } catch (error) {
         return res.status(400).json({
           message: 'Invalid JSON format for menu',
-          error: error.message
+          error: error.message,
         })
       }
     }
-    
-    if (req.file) {
-      if (stall.imageUrl) {
-        const oldKey = stall.imageUrl.split('/').pop()
-        await deleteFromS3(`stalls/${oldKey}`)
+
+    if (req.files) {
+      if (req.files['image']) {
+        if (stall.imageUrl) {
+          const oldKey = stall.imageUrl.split('/').pop()
+          await deleteFromS3(`stalls/${oldKey}`)
+        }
+        const uploadResult = await uploadToS3(req.files['image'][0], 'stalls')
+        updates.imageUrl = uploadResult.imageUrl
+        updates.thumbnailUrl = uploadResult.thumbnailUrl
       }
-      
-      const uploadResult = await uploadToS3(req.file, 'stalls')
-      updates.imageUrl = uploadResult.imageUrl
-      updates.thumbnailUrl = uploadResult.thumbnailUrl
+      if (req.files['banner']) {
+        if (stall.bannerUrl) {
+          const oldKey = stall.bannerUrl.split('/').pop()
+          await deleteFromS3(`stalls/banners/${oldKey}`)
+        }
+        const uploadResult = await uploadToS3(req.files['banner'][0], 'stalls/banners')
+        updates.bannerUrl = uploadResult.imageUrl
+      }
     }
-    
-    const updatedStall = await Stall.findByIdAndUpdate(
-      stallId,
-      updates,
-      { new: true }
-    )
-    
+
+    const updatedStall = await Stall.findByIdAndUpdate(stallId, { $set: updates }, { new: true })
+
     return res.status(200).json({
       message: 'Stall updated successfully',
-      data: updatedStall
+      data: updatedStall,
     })
   } catch (error) {
     return res.status(400).json({
       message: 'Error updating stall',
-      error: error.message
+      error: error.message,
     })
   }
 }
