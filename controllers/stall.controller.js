@@ -79,25 +79,12 @@ async function createStall(req, res) {
   }
 }
 
-async function getStallMenu(req, res) {
-  try {
-    const stalls = await Stall.find({}, 'motherStall menu -_id').sort('motherStall')
-    return res.status(200).json({
-      message: 'Menu retrieved successfully',
-      data: stalls
-    })
-  } catch (error) {
-    return res.status(400).json({
-      message: 'Error retrieving menu',
-      error: error.message
-    })
-  }
-}
-
 async function getAllStalls(req, res) {
   try {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
 
     const stalls = await Stall.aggregate([
       {
@@ -109,6 +96,14 @@ async function getAllStalls(req, res) {
           localField: 'stallAdmin',
           foreignField: '_id',
           as: 'stallAdminDetails',
+        },
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'stallCashiers',
+          foreignField: '_id',
+          as: 'stallCashierDetails',
         },
       },
       {
@@ -125,10 +120,7 @@ async function getAllStalls(req, res) {
             {
               $match: {
                 $expr: {
-                  $and: [
-                    { $eq: ['$stallId', '$$stallId'] },
-                    { $gte: ['$orderDate', '$$today'] }
-                  ],
+                  $and: [{ $eq: ['$stallId', '$$stallId'] }, { $gte: ['$orderDate', '$$today'] }],
                 },
               },
             },
@@ -146,39 +138,39 @@ async function getAllStalls(req, res) {
       {
         $lookup: {
           from: 'orders',
-          let: { stallId: '$_id' },
+          let: { stallId: '$_id', startOfMonth: startOfMonth },
           pipeline: [
             {
               $match: {
                 $expr: {
-                  $eq: ['$stallId', '$$stallId'],
+                  $and: [{ $eq: ['$stallId', '$$stallId'] }, { $gte: ['$orderDate', '$$startOfMonth'] }],
                 },
               },
             },
             {
               $group: {
                 _id: null,
-                lifetimeTotalOrderValue: { $sum: '$totalAmount' },
-                lifetimeOrderCount: { $sum: 1 },
+                monthlyTotalOrderValue: { $sum: '$totalAmount' },
+                monthlyOrderCount: { $sum: 1 },
               },
             },
           ],
-          as: 'lifetimeOrders',
+          as: 'monthlyOrders',
         },
       },
       {
         $addFields: {
           todayTotalOrderValue: {
-            $ifNull: [{ $arrayElemAt: ['$todayOrders.todayTotalOrderValue', 0] }, 0]
+            $ifNull: [{ $arrayElemAt: ['$todayOrders.todayTotalOrderValue', 0] }, 0],
           },
           todayOrderCount: {
-            $ifNull: [{ $arrayElemAt: ['$todayOrders.todayOrderCount', 0] }, 0]
+            $ifNull: [{ $arrayElemAt: ['$todayOrders.todayOrderCount', 0] }, 0],
           },
-          lifetimeTotalOrderValue: {
-            $ifNull: [{ $arrayElemAt: ['$lifetimeOrders.lifetimeTotalOrderValue', 0] }, 0]
+          monthlyTotalOrderValue: {
+            $ifNull: [{ $arrayElemAt: ['$monthlyOrders.monthlyTotalOrderValue', 0] }, 0],
           },
-          lifetimeOrderCount: {
-            $ifNull: [{ $arrayElemAt: ['$lifetimeOrders.lifetimeOrderCount', 0] }, 0]
+          monthlyOrderCount: {
+            $ifNull: [{ $arrayElemAt: ['$monthlyOrders.monthlyOrderCount', 0] }, 0],
           },
         },
       },
@@ -188,214 +180,39 @@ async function getAllStalls(req, res) {
           imageUrl: 1,
           thumbnailUrl: 1,
           minimumOrderAmount: 1,
+          menu: 1,
           'stallAdminDetails._id': 1,
           'stallAdminDetails.name': 1,
           'stallAdminDetails.phone': 1,
+          'stallAdminDetails.role': 1,
+          stallCashierDetails: {
+            $map: {
+              input: '$stallCashierDetails',
+              as: 'cashier',
+              in: {
+                _id: '$$cashier._id',
+                name: '$$cashier.name',
+                phone: '$$cashier.phone',
+                role: '$$cashier.role',
+              },
+            },
+          },
           todayTotalOrderValue: 1,
           todayOrderCount: 1,
-          lifetimeTotalOrderValue: 1,
-          lifetimeOrderCount: 1,
+          monthlyTotalOrderValue: 1,
+          monthlyOrderCount: 1,
         },
       },
     ])
 
     return res.status(200).json({
       message: 'Stalls retrieved successfully',
-      data: stalls
+      data: stalls,
     })
   } catch (error) {
     return res.status(400).json({
       message: 'Error retrieving stalls',
-      error: error.message
-    })
-  }
-}
-
-async function editStall(req, res) {
-  const { stallId } = req.params
-
-  try {
-    const stall = await Stall.findById(stallId)
-    if (!stall) {
-      return res.status(404).json({ message: 'Stall not found' })
-    }
-
-    let updates = { ...req.body }
-
-    // Parse JSON strings if present
-    if (updates.stallCashiers) {
-      try {
-        updates.stallCashiers = JSON.parse(updates.stallCashiers)
-      } catch (error) {
-        return res.status(400).json({
-          message: 'Invalid JSON format for stallCashiers',
-          error: error.message
-        })
-      }
-    }
-
-    if (updates.menu) {
-      try {
-        updates.menu = JSON.parse(updates.menu)
-      } catch (error) {
-        return res.status(400).json({
-          message: 'Invalid JSON format for menu',
-          error: error.message
-        })
-      }
-    }
-
-    if (req.file) {
-      if (stall.imageUrl) {
-        const oldKey = stall.imageUrl.split('/').pop()
-        await deleteFromS3(`stalls/${oldKey}`)
-      }
-
-      const uploadResult = await uploadToS3(req.file, 'stalls')
-      updates.imageUrl = uploadResult.imageUrl
-      updates.thumbnailUrl = uploadResult.thumbnailUrl
-    }
-
-    const updatedStall = await Stall.findByIdAndUpdate(
-      stallId,
-      updates,
-      { new: true }
-    )
-
-    return res.status(200).json({
-      message: 'Stall updated successfully',
-      data: updatedStall
-    })
-  } catch (error) {
-    return res.status(400).json({
-      message: 'Error updating stall',
-      error: error.message
-    })
-  }
-}
-
-async function addMenuItem(req, res) {
-  const { stallId } = req.params
-  const { foodName, foodPrice, isAvailable, currentStock, description, isAvailableForDelivery } = req.body
-
-  try {
-    const stall = await Stall.findById(stallId)
-    if (!stall) {
-      return res.status(404).json({ message: 'Stall not found' })
-    }
-
-    let imageUrl = null
-    let thumbnailUrl = null
-
-    if (req.file) {
-      const uploadResult = await uploadToS3(req.file, 'menu-items')
-      imageUrl = uploadResult.imageUrl
-      thumbnailUrl = uploadResult.thumbnailUrl
-    }
-
-    const menuItem = {
-      foodName,
-      foodPrice: Number(foodPrice),
-      isAvailable: isAvailable === 'true',
-      currentStock: Number(currentStock),
-      description,
-      isAvailableForDelivery: isAvailableForDelivery === 'true',
-      imageUrl,
-      thumbnailUrl
-    }
-
-    stall.menu.push(menuItem)
-    await stall.save()
-
-    return res.status(201).json({
-      message: 'Menu item added successfully',
-      data: stall
-    })
-  } catch (error) {
-    return res.status(400).json({
-      message: 'Error adding menu item',
-      error: error.message
-    })
-  }
-}
-
-async function updateMenuItem(req, res) {
-  const { stallId, menuId } = req.params
-  const updates = req.body
-
-  try {
-    const stall = await Stall.findById(stallId)
-    if (!stall) {
-      return res.status(404).json({ message: 'Stall not found' })
-    }
-
-    const menuItem = stall.menu.id(menuId)
-    if (!menuItem) {
-      return res.status(404).json({ message: 'Menu item not found' })
-    }
-
-    if (req.file) {
-      if (menuItem.imageUrl) {
-        const oldKey = menuItem.imageUrl.split('/').pop()
-        await deleteFromS3(`menu-items/${oldKey}`)
-      }
-
-      const uploadResult = await uploadToS3(req.file, 'menu-items')
-      updates.imageUrl = uploadResult.imageUrl
-      updates.thumbnailUrl = uploadResult.thumbnailUrl
-    }
-
-    // Convert string values to appropriate types
-    if (updates.foodPrice) updates.foodPrice = Number(updates.foodPrice)
-    if (updates.isAvailable !== undefined) updates.isAvailable = updates.isAvailable === 'true'
-    if (updates.currentStock) updates.currentStock = Number(updates.currentStock)
-    if (updates.isAvailableForDelivery !== undefined) updates.isAvailableForDelivery = updates.isAvailableForDelivery === 'true'
-
-    Object.assign(menuItem, updates)
-    await stall.save()
-
-    return res.status(200).json({
-      message: 'Menu item updated successfully',
-      data: stall
-    })
-  } catch (error) {
-    return res.status(400).json({
-      message: 'Error updating menu item',
-      error: error.message
-    })
-  }
-}
-
-async function removeMenuItem(req, res) {
-  const { stallId, menuId } = req.params
-
-  try {
-    const stall = await Stall.findById(stallId)
-    if (!stall) {
-      return res.status(404).json({ message: 'Stall not found' })
-    }
-
-    const menuItem = stall.menu.id(menuId)
-    if (!menuItem) {
-      return res.status(404).json({ message: 'Menu item not found' })
-    }
-
-    if (menuItem.imageUrl) {
-      const imageKey = menuItem.imageUrl.split('/').pop()
-      await deleteFromS3(`menu-items/${imageKey}`)
-    }
-
-    stall.menu = stall.menu.filter(item => item.id !== menuId)
-    await stall.save()
-
-    return res.status(200).json({
-      message: 'Menu item removed successfully',
-      data: stall
-    })
-  } catch (error) {
-    return res.status(400).json({
-      message: 'Error removing menu item',
-      error: error.message
+      error: error.message,
     })
   }
 }
@@ -405,9 +222,33 @@ async function getStall(req, res) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+
   try {
     const aggregation = await Stall.aggregate([
       { $match: { _id: new mongoose.Types.ObjectId(stallId) } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'stallAdmin',
+          foreignField: '_id',
+          as: 'stallAdminDetails',
+        },
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'stallCashiers',
+          foreignField: '_id',
+          as: 'stallCashierDetails',
+        },
+      },
+      {
+        $unwind: {
+          path: '$stallAdminDetails',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
       {
         $lookup: {
           from: 'orders',
@@ -416,10 +257,7 @@ async function getStall(req, res) {
             {
               $match: {
                 $expr: {
-                  $and: [
-                    { $eq: ['$stallId', '$$stallId'] },
-                    { $gte: ['$orderDate', '$$today'] }
-                  ],
+                  $and: [{ $eq: ['$stallId', '$$stallId'] }, { $gte: ['$orderDate', '$$today'] }],
                 },
               },
             },
@@ -437,37 +275,81 @@ async function getStall(req, res) {
       {
         $lookup: {
           from: 'orders',
-          localField: '_id',
-          foreignField: 'stallId',
-          as: 'lifetimeOrdersInfo',
+          let: { stallId: '$_id', startOfMonth: startOfMonth },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$stallId', '$$stallId'] }, { $gte: ['$orderDate', '$$startOfMonth'] }],
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                monthlyTotalOrderValue: { $sum: '$totalAmount' },
+                monthlyOrderCount: { $sum: 1 },
+              },
+            },
+          ],
+          as: 'monthlyOrdersInfo',
         },
       },
       {
         $unwind: {
           path: '$todayOrdersInfo',
-          preserveNullAndEmptyArrays: true
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $unwind: {
+          path: '$monthlyOrdersInfo',
+          preserveNullAndEmptyArrays: true,
         },
       },
       {
         $addFields: {
           todayTotalOrderValue: {
-            $ifNull: ['$todayOrdersInfo.todayTotalOrderValue', 0]
+            $ifNull: ['$todayOrdersInfo.todayTotalOrderValue', 0],
           },
           todayOrderCount: {
-            $ifNull: ['$todayOrdersInfo.todayOrderCount', 0]
+            $ifNull: ['$todayOrdersInfo.todayOrderCount', 0],
           },
-          lifetimeTotalOrderValue: {
-            $sum: '$lifetimeOrdersInfo.totalAmount'
+          monthlyTotalOrderValue: {
+            $ifNull: ['$monthlyOrdersInfo.monthlyTotalOrderValue', 0],
           },
-          lifetimeOrderCount: {
-            $size: '$lifetimeOrdersInfo'
+          monthlyOrderCount: {
+            $ifNull: ['$monthlyOrdersInfo.monthlyOrderCount', 0],
           },
         },
       },
       {
         $project: {
-          todayOrdersInfo: 0,
-          lifetimeOrdersInfo: 0,
+          motherStall: 1,
+          imageUrl: 1,
+          thumbnailUrl: 1,
+          minimumOrderAmount: 1,
+          menu: 1,
+          'stallAdminDetails._id': 1,
+          'stallAdminDetails.name': 1,
+          'stallAdminDetails.phone': 1,
+          'stallAdminDetails.role': 1,
+          stallCashierDetails: {
+            $map: {
+              input: '$stallCashierDetails',
+              as: 'cashier',
+              in: {
+                _id: '$$cashier._id',
+                name: '$$cashier.name',
+                phone: '$$cashier.phone',
+                role: '$$cashier.role',
+              },
+            },
+          },
+          todayTotalOrderValue: 1,
+          todayOrderCount: 1,
+          monthlyTotalOrderValue: 1,
+          monthlyOrderCount: 1,
         },
       },
     ])
@@ -483,10 +365,420 @@ async function getStall(req, res) {
   } catch (error) {
     return res.status(400).json({
       message: 'Error retrieving stall',
+      error: error.message,
+    })
+  }
+}
+
+
+async function getStallMenu(req, res) {
+  try {
+    const stalls = await Stall.find({}, 'motherStall menu -_id').sort('motherStall')
+    return res.status(200).json({
+      message: 'Menu retrieved successfully',
+      data: stalls
+    })
+  } catch (error) {
+    return res.status(400).json({
+      message: 'Error retrieving menu',
       error: error.message
     })
   }
 }
+
+async function editStall(req, res) {
+  const { stallId } = req.params
+  
+  try {
+    const stall = await Stall.findById(stallId)
+    if (!stall) {
+      return res.status(404).json({ message: 'Stall not found' })
+    }
+    
+    let updates = { ...req.body }
+    
+    // Parse JSON strings if present
+    if (updates.stallCashiers) {
+      try {
+        updates.stallCashiers = JSON.parse(updates.stallCashiers)
+      } catch (error) {
+        return res.status(400).json({
+          message: 'Invalid JSON format for stallCashiers',
+          error: error.message
+        })
+      }
+    }
+    
+    if (updates.menu) {
+      try {
+        updates.menu = JSON.parse(updates.menu)
+      } catch (error) {
+        return res.status(400).json({
+          message: 'Invalid JSON format for menu',
+          error: error.message
+        })
+      }
+    }
+    
+    if (req.file) {
+      if (stall.imageUrl) {
+        const oldKey = stall.imageUrl.split('/').pop()
+        await deleteFromS3(`stalls/${oldKey}`)
+      }
+      
+      const uploadResult = await uploadToS3(req.file, 'stalls')
+      updates.imageUrl = uploadResult.imageUrl
+      updates.thumbnailUrl = uploadResult.thumbnailUrl
+    }
+    
+    const updatedStall = await Stall.findByIdAndUpdate(
+      stallId,
+      updates,
+      { new: true }
+    )
+    
+    return res.status(200).json({
+      message: 'Stall updated successfully',
+      data: updatedStall
+    })
+  } catch (error) {
+    return res.status(400).json({
+      message: 'Error updating stall',
+      error: error.message
+    })
+  }
+}
+
+async function addMenuItem(req, res) {
+  const { stallId } = req.params
+  const { foodName, foodPrice, isAvailable, currentStock, description, isAvailableForDelivery } = req.body
+  
+  try {
+    const stall = await Stall.findById(stallId)
+    if (!stall) {
+      return res.status(404).json({ message: 'Stall not found' })
+    }
+    
+    let imageUrl = null
+    let thumbnailUrl = null
+    
+    if (req.file) {
+      const uploadResult = await uploadToS3(req.file, 'menu-items')
+      imageUrl = uploadResult.imageUrl
+      thumbnailUrl = uploadResult.thumbnailUrl
+    }
+    
+    const menuItem = {
+      foodName,
+      foodPrice: Number(foodPrice),
+      isAvailable: isAvailable === 'true',
+      currentStock: Number(currentStock),
+      description,
+      isAvailableForDelivery: isAvailableForDelivery === 'true',
+      imageUrl,
+      thumbnailUrl
+    }
+    
+    stall.menu.push(menuItem)
+    await stall.save()
+    
+    return res.status(201).json({
+      message: 'Menu item added successfully',
+      data: stall
+    })
+  } catch (error) {
+    return res.status(400).json({
+      message: 'Error adding menu item',
+      error: error.message
+    })
+  }
+}
+
+async function updateMenuItem(req, res) {
+  const { stallId, menuId } = req.params
+  const updates = req.body
+  
+  try {
+    const stall = await Stall.findById(stallId)
+    if (!stall) {
+      return res.status(404).json({ message: 'Stall not found' })
+    }
+    
+    const menuItem = stall.menu.id(menuId)
+    if (!menuItem) {
+      return res.status(404).json({ message: 'Menu item not found' })
+    }
+    
+    if (req.file) {
+      if (menuItem.imageUrl) {
+        const oldKey = menuItem.imageUrl.split('/').pop()
+        await deleteFromS3(`menu-items/${oldKey}`)
+      }
+      
+      const uploadResult = await uploadToS3(req.file, 'menu-items')
+      updates.imageUrl = uploadResult.imageUrl
+      updates.thumbnailUrl = uploadResult.thumbnailUrl
+    }
+    
+    // Convert string values to appropriate types
+    if (updates.foodPrice) updates.foodPrice = Number(updates.foodPrice)
+      if (updates.isAvailable !== undefined) updates.isAvailable = updates.isAvailable === 'true'
+    if (updates.currentStock) updates.currentStock = Number(updates.currentStock)
+      if (updates.isAvailableForDelivery !== undefined) updates.isAvailableForDelivery = updates.isAvailableForDelivery === 'true'
+    
+    Object.assign(menuItem, updates)
+    await stall.save()
+    
+    return res.status(200).json({
+      message: 'Menu item updated successfully',
+      data: stall
+    })
+  } catch (error) {
+    return res.status(400).json({
+      message: 'Error updating menu item',
+      error: error.message
+    })
+  }
+}
+
+async function removeMenuItem(req, res) {
+  const { stallId, menuId } = req.params
+  
+  try {
+    const stall = await Stall.findById(stallId)
+    if (!stall) {
+      return res.status(404).json({ message: 'Stall not found' })
+    }
+    
+    const menuItem = stall.menu.id(menuId)
+    if (!menuItem) {
+      return res.status(404).json({ message: 'Menu item not found' })
+    }
+    
+    if (menuItem.imageUrl) {
+      const imageKey = menuItem.imageUrl.split('/').pop()
+      await deleteFromS3(`menu-items/${imageKey}`)
+    }
+    
+    stall.menu = stall.menu.filter(item => item.id !== menuId)
+    await stall.save()
+    
+    return res.status(200).json({
+      message: 'Menu item removed successfully',
+      data: stall
+    })
+  } catch (error) {
+    return res.status(400).json({
+      message: 'Error removing menu item',
+      error: error.message
+    })
+  }
+}
+
+// async function getStall(req, res) {
+//   const { stallId } = req.params
+//   const today = new Date()
+//   today.setHours(0, 0, 0, 0)
+  
+//   try {
+//     const aggregation = await Stall.aggregate([
+//       { $match: { _id: new mongoose.Types.ObjectId(stallId) } },
+//       {
+//         $lookup: {
+//           from: 'orders',
+//           let: { stallId: '$_id', today: today },
+//           pipeline: [
+//             {
+//               $match: {
+//                 $expr: {
+//                   $and: [
+//                     { $eq: ['$stallId', '$$stallId'] },
+//                     { $gte: ['$orderDate', '$$today'] }
+//                   ],
+//                 },
+//               },
+//             },
+//             {
+//               $group: {
+//                 _id: null,
+//                 todayTotalOrderValue: { $sum: '$totalAmount' },
+//                 todayOrderCount: { $sum: 1 },
+//               },
+//             },
+//           ],
+//           as: 'todayOrdersInfo',
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: 'orders',
+//           localField: '_id',
+//           foreignField: 'stallId',
+//           as: 'lifetimeOrdersInfo',
+//         },
+//       },
+//       {
+//         $unwind: {
+//           path: '$todayOrdersInfo',
+//           preserveNullAndEmptyArrays: true
+//         },
+//       },
+//       {
+//         $addFields: {
+//           todayTotalOrderValue: {
+//             $ifNull: ['$todayOrdersInfo.todayTotalOrderValue', 0]
+//           },
+//           todayOrderCount: {
+//             $ifNull: ['$todayOrdersInfo.todayOrderCount', 0]
+//           },
+//           lifetimeTotalOrderValue: {
+//             $sum: '$lifetimeOrdersInfo.totalAmount'
+//           },
+//           lifetimeOrderCount: {
+//             $size: '$lifetimeOrdersInfo'
+//           },
+//         },
+//       },
+//       {
+//         $project: {
+//           todayOrdersInfo: 0,
+//           lifetimeOrdersInfo: 0,
+//         },
+//       },
+//     ])
+    
+//     if (aggregation.length === 0) {
+//       return res.status(404).json({ message: 'Stall not found' })
+//     }
+
+//     return res.status(200).json({
+//       message: 'Stall retrieved successfully',
+//       data: aggregation[0],
+//     })
+//   } catch (error) {
+//     return res.status(400).json({
+//       message: 'Error retrieving stall',
+//       error: error.message
+//     })
+//   }
+// }
+
+// async function getAllStalls(req, res) {
+//   try {
+//     const today = new Date()
+//     today.setHours(0, 0, 0, 0)
+
+//     const stalls = await Stall.aggregate([
+//       {
+//         $sort: { motherStall: 1 },
+//       },
+//       {
+//         $lookup: {
+//           from: 'users',
+//           localField: 'stallAdmin',
+//           foreignField: '_id',
+//           as: 'stallAdminDetails',
+//         },
+//       },
+//       {
+//         $unwind: {
+//           path: '$stallAdminDetails',
+//           preserveNullAndEmptyArrays: true,
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: 'orders',
+//           let: { stallId: '$_id', today: today },
+//           pipeline: [
+//             {
+//               $match: {
+//                 $expr: {
+//                   $and: [
+//                     { $eq: ['$stallId', '$$stallId'] },
+//                     { $gte: ['$orderDate', '$$today'] }
+//                   ],
+//                 },
+//               },
+//             },
+//             {
+//               $group: {
+//                 _id: null,
+//                 todayTotalOrderValue: { $sum: '$totalAmount' },
+//                 todayOrderCount: { $sum: 1 },
+//               },
+//             },
+//           ],
+//           as: 'todayOrders',
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: 'orders',
+//           let: { stallId: '$_id' },
+//           pipeline: [
+//             {
+//               $match: {
+//                 $expr: {
+//                   $eq: ['$stallId', '$$stallId'],
+//                 },
+//               },
+//             },
+//             {
+//               $group: {
+//                 _id: null,
+//                 lifetimeTotalOrderValue: { $sum: '$totalAmount' },
+//                 lifetimeOrderCount: { $sum: 1 },
+//               },
+//             },
+//           ],
+//           as: 'lifetimeOrders',
+//         },
+//       },
+//       {
+//         $addFields: {
+//           todayTotalOrderValue: {
+//             $ifNull: [{ $arrayElemAt: ['$todayOrders.todayTotalOrderValue', 0] }, 0]
+//           },
+//           todayOrderCount: {
+//             $ifNull: [{ $arrayElemAt: ['$todayOrders.todayOrderCount', 0] }, 0]
+//           },
+//           lifetimeTotalOrderValue: {
+//             $ifNull: [{ $arrayElemAt: ['$lifetimeOrders.lifetimeTotalOrderValue', 0] }, 0]
+//           },
+//           lifetimeOrderCount: {
+//             $ifNull: [{ $arrayElemAt: ['$lifetimeOrders.lifetimeOrderCount', 0] }, 0]
+//           },
+//         },
+//       },
+//       {
+//         $project: {
+//           motherStall: 1,
+//           imageUrl: 1,
+//           thumbnailUrl: 1,
+//           minimumOrderAmount: 1,
+//           'stallAdminDetails._id': 1,
+//           'stallAdminDetails.name': 1,
+//           'stallAdminDetails.phone': 1,
+//           todayTotalOrderValue: 1,
+//           todayOrderCount: 1,
+//           lifetimeTotalOrderValue: 1,
+//           lifetimeOrderCount: 1,
+//         },
+//       },
+//     ])
+
+//     return res.status(200).json({
+//       message: 'Stalls retrieved successfully',
+//       data: stalls
+//     })
+//   } catch (error) {
+//     return res.status(400).json({
+//       message: 'Error retrieving stalls',
+//       error: error.message
+//     })
+//   }
+// }
 
 module.exports = {
   createStall,
