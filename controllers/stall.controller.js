@@ -295,6 +295,7 @@ async function getAllStalls(req, res) {
           todayOrderCount: 1,
           monthlyTotalOrderValue: 1,
           monthlyOrderCount: 1,
+          createdAt: 1,
         },
       },
     ])
@@ -444,6 +445,7 @@ async function getStall(req, res) {
           todayOrderCount: 1,
           monthlyTotalOrderValue: 1,
           monthlyOrderCount: 1,
+          createdAt: 1,
         },
       },
     ])
