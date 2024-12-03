@@ -217,9 +217,43 @@ async function resetPassword(req, res) {
   }
 }
 
+async function getAllRechargerAdmins(req, res) {
+  try {
+    const rechargerAdmins = await User.find({ role: 'rechargerAdmin' }, 'name phone role').sort('name')
+
+    return res.status(200).json({
+      message: 'Recharger admins fetched successfully',
+      data: rechargerAdmins,
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Failed to fetch recharger admins',
+      error: error.message,
+    })
+  }
+}
+
+async function getAllRechargers(req, res) {
+  try {
+    const rechargers = await User.find({ role: 'recharger' }, 'name phone role').sort('name')
+
+    return res.status(200).json({
+      message: 'Rechargers fetched successfully',
+      data: rechargers,
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Failed to fetch rechargers',
+      error: error.message,
+    })
+  }
+}
+
 module.exports = {
   register,
   login,
   requestPasswordReset,
   resetPassword,
+  getAllRechargers,
+  getAllRechargerAdmins
 }
