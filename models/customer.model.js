@@ -41,7 +41,6 @@ const customerSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, 'please provide a password'],
       minlength: 6,
     },
     cardUid: { type: String, required: false },
