@@ -27,7 +27,7 @@ router.post(
 
 router.get('/stall/:stallId', authenticateUser, authorizeUser('masterAdmin', 'rechargerAdmin', 'recharger', 'stallAdmin', 'stallCashier'), stallController.getStall)
 
-router.get('/stall', authenticateUser, authorizeUser('masterAdmin', 'rechargerAdmin', 'recharger'), stallController.getAllStalls)
+router.get('/stall', authenticateUser, authorizeUser('masterAdmin', 'rechargerAdmin', 'recharger', 'stallAdmin', 'stallCashier'), stallController.getAllStalls)
 
 // router.delete('/stall/:stallId', authenticateUser, authorizeUser('masterAdmin'), stallController.deleteStall)
 
