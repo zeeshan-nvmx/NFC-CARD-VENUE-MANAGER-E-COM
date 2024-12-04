@@ -3,81 +3,6 @@ const mongoose = require('mongoose')
 const Stall = require('../models/stall.model')
 const { uploadToS3, deleteFromS3 } = require('../utils/image')
 
-// async function createStall(req, res) {
-//   const menuItemSchema = Joi.object({
-//     foodName: Joi.string().required(),
-//     foodPrice: Joi.number().required(),
-//     isAvailable: Joi.boolean().required(),
-//     currentStock: Joi.number().required(),
-//     description: Joi.string().allow(''),
-//     isAvailableForDelivery: Joi.boolean().default(true),
-//   })
-
-//   const stallValidationSchema = Joi.object({
-//     motherStall: Joi.string().required(),
-//     stallAdmin: Joi.string().pattern(new RegExp('^[0-9a-fA-F]{24}$')),
-//     stallCashiers: Joi.string(),
-//     menu: Joi.string(),
-//     minimumOrderAmount: Joi.number().min(0).default(0),
-//   })
-
-//   try {
-//     await stallValidationSchema.validateAsync(req.body, { abortEarly: false })
-//     let { motherStall, stallAdmin, stallCashiers, menu, minimumOrderAmount } = req.body
-
-//     // Parse JSON strings for arrays
-//     try {
-//       stallCashiers = stallCashiers ? JSON.parse(stallCashiers) : []
-//       menu = menu ? JSON.parse(menu) : []
-//     } catch (error) {
-//       return res.status(400).json({ 
-//         message: 'Invalid JSON format for stallCashiers or menu', 
-//         error: error.message 
-//       })
-//     }
-
-//     // Validate menu items after parsing
-//     for (const item of menu) {
-//       try {
-//         await menuItemSchema.validateAsync(item, { abortEarly: false })
-//       } catch (error) {
-//         return res.status(400).json({ 
-//           message: 'Invalid menu item format', 
-//           error: error.message 
-//         })
-//       }
-//     }
-
-//     let imageUrl = null
-//     let thumbnailUrl = null
-
-//     if (req.file) {
-//       const uploadResult = await uploadToS3(req.file, 'stalls')
-//       imageUrl = uploadResult.imageUrl
-//       thumbnailUrl = uploadResult.thumbnailUrl
-//     }
-
-//     const newStall = await Stall.create({
-//       motherStall,
-//       stallAdmin,
-//       stallCashiers,
-//       menu,
-//       minimumOrderAmount,
-//       imageUrl,
-//       thumbnailUrl
-//     })
-
-//     return res.status(201).json({
-//       message: 'Stall created successfully',
-//       data: newStall
-//     })
-//   } catch (error) {
-//     return res.status(400).json({
-//       message: 'Error creating stall',
-//       error: error.message
-//     })
-//   }
-// }
 
 async function createStall(req, res) {
   const menuItemSchema = Joi.object({
@@ -173,14 +98,153 @@ async function createStall(req, res) {
   }
 }
 
+// async function getAllStalls(req, res) {
+//   try {
+//     const today = new Date()
+//     today.setHours(0, 0, 0, 0)
+
+//     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+
+//     const stalls = await Stall.aggregate([
+//       {
+//         $sort: { motherStall: 1 },
+//       },
+//       {
+//         $lookup: {
+//           from: 'users',
+//           localField: 'stallAdmin',
+//           foreignField: '_id',
+//           as: 'stallAdminDetails',
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: 'users',
+//           localField: 'stallCashiers',
+//           foreignField: '_id',
+//           as: 'stallCashierDetails',
+//         },
+//       },
+//       {
+//         $unwind: {
+//           path: '$stallAdminDetails',
+//           preserveNullAndEmptyArrays: true,
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: 'orders',
+//           let: { stallId: '$_id', today: today },
+//           pipeline: [
+//             {
+//               $match: {
+//                 $expr: {
+//                   $and: [{ $eq: ['$stallId', '$$stallId'] }, { $gte: ['$orderDate', '$$today'] }],
+//                 },
+//               },
+//             },
+//             {
+//               $group: {
+//                 _id: null,
+//                 todayTotalOrderValue: { $sum: '$totalAmount' },
+//                 todayOrderCount: { $sum: 1 },
+//               },
+//             },
+//           ],
+//           as: 'todayOrders',
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: 'orders',
+//           let: { stallId: '$_id', startOfMonth: startOfMonth },
+//           pipeline: [
+//             {
+//               $match: {
+//                 $expr: {
+//                   $and: [{ $eq: ['$stallId', '$$stallId'] }, { $gte: ['$orderDate', '$$startOfMonth'] }],
+//                 },
+//               },
+//             },
+//             {
+//               $group: {
+//                 _id: null,
+//                 monthlyTotalOrderValue: { $sum: '$totalAmount' },
+//                 monthlyOrderCount: { $sum: 1 },
+//               },
+//             },
+//           ],
+//           as: 'monthlyOrders',
+//         },
+//       },
+//       {
+//         $addFields: {
+//           todayTotalOrderValue: {
+//             $ifNull: [{ $arrayElemAt: ['$todayOrders.todayTotalOrderValue', 0] }, 0],
+//           },
+//           todayOrderCount: {
+//             $ifNull: [{ $arrayElemAt: ['$todayOrders.todayOrderCount', 0] }, 0],
+//           },
+//           monthlyTotalOrderValue: {
+//             $ifNull: [{ $arrayElemAt: ['$monthlyOrders.monthlyTotalOrderValue', 0] }, 0],
+//           },
+//           monthlyOrderCount: {
+//             $ifNull: [{ $arrayElemAt: ['$monthlyOrders.monthlyOrderCount', 0] }, 0],
+//           },
+//         },
+//       },
+//       {
+//         $project: {
+//           motherStall: 1,
+//           imageUrl: 1,
+//           thumbnailUrl: 1,
+//           minimumOrderAmount: 1,
+//           menu: 1,
+//           'stallAdminDetails._id': 1,
+//           'stallAdminDetails.name': 1,
+//           'stallAdminDetails.phone': 1,
+//           'stallAdminDetails.role': 1,
+//           stallCashierDetails: {
+//             $map: {
+//               input: '$stallCashierDetails',
+//               as: 'cashier',
+//               in: {
+//                 _id: '$$cashier._id',
+//                 name: '$$cashier.name',
+//                 phone: '$$cashier.phone',
+//                 role: '$$cashier.role',
+//               },
+//             },
+//           },
+//           todayTotalOrderValue: 1,
+//           todayOrderCount: 1,
+//           monthlyTotalOrderValue: 1,
+//           monthlyOrderCount: 1,
+//           createdAt: 1,
+//         },
+//       },
+//     ])
+
+//     return res.status(200).json({
+//       message: 'Stalls retrieved successfully',
+//       data: stalls,
+//     })
+//   } catch (error) {
+//     return res.status(400).json({
+//       message: 'Error retrieving stalls',
+//       error: error.message,
+//     })
+//   }
+// }
+
 async function getAllStalls(req, res) {
   try {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
 
-    const stalls = await Stall.aggregate([
+    // Base pipeline stages that are common for all roles
+    const basePipeline = [
       {
         $sort: { motherStall: 1 },
       },
@@ -206,6 +270,10 @@ async function getAllStalls(req, res) {
           preserveNullAndEmptyArrays: true,
         },
       },
+    ]
+
+    // Order lookup stages
+    const orderLookupStages = [
       {
         $lookup: {
           from: 'orders',
@@ -268,37 +336,140 @@ async function getAllStalls(req, res) {
           },
         },
       },
-      {
-        $project: {
-          motherStall: 1,
-          imageUrl: 1,
-          thumbnailUrl: 1,
-          minimumOrderAmount: 1,
-          menu: 1,
-          'stallAdminDetails._id': 1,
-          'stallAdminDetails.name': 1,
-          'stallAdminDetails.phone': 1,
-          'stallAdminDetails.role': 1,
-          stallCashierDetails: {
-            $map: {
-              input: '$stallCashierDetails',
-              as: 'cashier',
-              in: {
-                _id: '$$cashier._id',
-                name: '$$cashier.name',
-                phone: '$$cashier.phone',
-                role: '$$cashier.role',
+    ]
+
+    let pipeline = []
+
+    if (req.user.role === 'masterAdmin') {
+      // masterAdmin sees everything
+      pipeline = [
+        ...basePipeline,
+        ...orderLookupStages,
+        {
+          $project: {
+            motherStall: 1,
+            imageUrl: 1,
+            thumbnailUrl: 1,
+            bannerUrl: 1,
+            minimumOrderAmount: 1,
+            menu: 1,
+            address: 1,
+            deliveryTime: 1,
+            'stallAdminDetails._id': 1,
+            'stallAdminDetails.name': 1,
+            'stallAdminDetails.phone': 1,
+            'stallAdminDetails.role': 1,
+            stallCashierDetails: {
+              $map: {
+                input: '$stallCashierDetails',
+                as: 'cashier',
+                in: {
+                  _id: '$$cashier._id',
+                  name: '$$cashier.name',
+                  phone: '$$cashier.phone',
+                  role: '$$cashier.role',
+                },
               },
             },
+            todayTotalOrderValue: 1,
+            todayOrderCount: 1,
+            monthlyTotalOrderValue: 1,
+            monthlyOrderCount: 1,
+            createdAt: 1,
           },
-          todayTotalOrderValue: 1,
-          todayOrderCount: 1,
-          monthlyTotalOrderValue: 1,
-          monthlyOrderCount: 1,
-          createdAt: 1,
         },
-      },
-    ])
+      ]
+    } else if (req.user.role === 'stallAdmin') {
+      // stallAdmin sees only their own stall
+      pipeline = [
+        {
+          $match: {
+            stallAdmin: new mongoose.Types.ObjectId(req.user.userId),
+          },
+        },
+        ...basePipeline,
+        ...orderLookupStages,
+        {
+          $project: {
+            motherStall: 1,
+            imageUrl: 1,
+            thumbnailUrl: 1,
+            bannerUrl: 1,
+            minimumOrderAmount: 1,
+            menu: 1,
+            address: 1,
+            deliveryTime: 1,
+            'stallAdminDetails._id': 1,
+            'stallAdminDetails.name': 1,
+            'stallAdminDetails.phone': 1,
+            'stallAdminDetails.role': 1,
+            stallCashierDetails: {
+              $map: {
+                input: '$stallCashierDetails',
+                as: 'cashier',
+                in: {
+                  _id: '$$cashier._id',
+                  name: '$$cashier.name',
+                  phone: '$$cashier.phone',
+                  role: '$$cashier.role',
+                },
+              },
+            },
+            todayTotalOrderValue: 1,
+            todayOrderCount: 1,
+            monthlyTotalOrderValue: 1,
+            monthlyOrderCount: 1,
+            createdAt: 1,
+          },
+        },
+      ]
+    } else if (req.user.role === 'stallCashier') {
+      // stallCashier sees only their assigned stall
+      pipeline = [
+        {
+          $match: {
+            stallCashiers: new mongoose.Types.ObjectId(req.user.userId),
+          },
+        },
+        ...basePipeline,
+        ...orderLookupStages,
+        {
+          $project: {
+            motherStall: 1,
+            imageUrl: 1,
+            thumbnailUrl: 1,
+            bannerUrl: 1,
+            minimumOrderAmount: 1,
+            menu: 1,
+            address: 1,
+            deliveryTime: 1,
+            'stallAdminDetails._id': 1,
+            'stallAdminDetails.name': 1,
+            'stallAdminDetails.phone': 1,
+            'stallAdminDetails.role': 1,
+            stallCashierDetails: {
+              $map: {
+                input: '$stallCashierDetails',
+                as: 'cashier',
+                in: {
+                  _id: '$$cashier._id',
+                  name: '$$cashier.name',
+                  phone: '$$cashier.phone',
+                  role: '$$cashier.role',
+                },
+              },
+            },
+            todayTotalOrderValue: 1,
+            todayOrderCount: 1,
+            monthlyTotalOrderValue: 1,
+            monthlyOrderCount: 1,
+            createdAt: 1,
+          },
+        },
+      ]
+    }
+
+    const stalls = await Stall.aggregate(pipeline)
 
     return res.status(200).json({
       message: 'Stalls retrieved successfully',
