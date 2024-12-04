@@ -8,6 +8,7 @@ const { upload } = require('../utils/image')
 // Public routes
 router.get('/stall/menu', stallController.getStallMenu)
 router.get('/stall/public', stallController.getAllStallsPublic)
+router.get('/stall/public/:stallId', stallController.getStallPublic)
 
 // Protected routes
 

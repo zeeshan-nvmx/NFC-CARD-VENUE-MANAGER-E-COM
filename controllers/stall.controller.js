@@ -499,6 +499,47 @@ async function getStall(req, res) {
   }
 }
 
+async function getStallPublic(req, res) {
+  const { stallId } = req.params
+
+  try {
+    const aggregation = await Stall.aggregate([
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(stallId),
+        },
+      },
+      {
+        $project: {
+          motherStall: 1,
+          imageUrl: 1,
+          thumbnailUrl: 1,
+          bannerUrl: 1,
+          minimumOrderAmount: 1,
+          menu: 1,
+          address: 1,
+          deliveryTime: 1,
+          createdAt: 1,
+        },
+      },
+    ])
+
+    if (aggregation.length === 0) {
+      return res.status(404).json({ message: 'Stall not found' })
+    }
+
+    return res.status(200).json({
+      message: 'Stall retrieved successfully',
+      data: aggregation[0],
+    })
+  } catch (error) {
+    return res.status(400).json({
+      message: 'Error retrieving stall',
+      error: error.message,
+    })
+  }
+}
+
 
 async function getStallMenu(req, res) {
   try {
@@ -1006,4 +1047,5 @@ module.exports = {
   updateMenuItem,
   removeMenuItem,
   getStall,
+  getStallPublic
 }
