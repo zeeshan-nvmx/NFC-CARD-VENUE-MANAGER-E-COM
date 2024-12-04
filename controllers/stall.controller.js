@@ -312,6 +312,39 @@ async function getAllStalls(req, res) {
   }
 }
 
+async function getAllStallsPublic(req, res) {
+  try {
+    const stalls = await Stall.aggregate([
+      {
+        $sort: { motherStall: 1 },
+      },
+      {
+        $project: {
+          motherStall: 1,
+          imageUrl: 1,
+          thumbnailUrl: 1,
+          bannerUrl: 1,
+          minimumOrderAmount: 1,
+          menu: 1,
+          address: 1,
+          deliveryTime: 1,
+          createdAt: 1,
+        },
+      },
+    ])
+
+    return res.status(200).json({
+      message: 'Stalls retrieved successfully',
+      data: stalls,
+    })
+  } catch (error) {
+    return res.status(400).json({
+      message: 'Error retrieving stalls',
+      error: error.message,
+    })
+  }
+}
+
 async function getStall(req, res) {
   const { stallId } = req.params
   const today = new Date()
@@ -967,6 +1000,7 @@ module.exports = {
   createStall,
   getStallMenu,
   getAllStalls,
+  getAllStallsPublic,
   editStall,
   addMenuItem,
   updateMenuItem,
