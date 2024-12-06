@@ -879,23 +879,34 @@ async function editStall(req, res) {
 
 async function addMenuItem(req, res) {
   const { stallId } = req.params
-  const { foodName, foodPrice, isAvailable, currentStock, description, isAvailableForDelivery } = req.body
   
+  const menuItemSchema = Joi.object({
+    foodName: Joi.string().required(),
+    foodPrice: Joi.number().required(),
+    isAvailable: Joi.string().valid('true', 'false').required(),
+    currentStock: Joi.number().required(),
+    description: Joi.string().allow(''),
+    isAvailableForDelivery: Joi.string().valid('true', 'false').default('true')
+  })
+
   try {
+    await menuItemSchema.validateAsync(req.body, { abortEarly: false })
+    const { foodName, foodPrice, isAvailable, currentStock, description, isAvailableForDelivery } = req.body
+
     const stall = await Stall.findById(stallId)
     if (!stall) {
       return res.status(404).json({ message: 'Stall not found' })
     }
-    
+
     let imageUrl = null
     let thumbnailUrl = null
-    
+
     if (req.file) {
       const uploadResult = await uploadToS3(req.file, 'menu-items')
       imageUrl = uploadResult.imageUrl
       thumbnailUrl = uploadResult.thumbnailUrl
     }
-    
+
     const menuItem = {
       foodName,
       foodPrice: Number(foodPrice),
@@ -906,15 +917,16 @@ async function addMenuItem(req, res) {
       imageUrl,
       thumbnailUrl
     }
-    
+
     stall.menu.push(menuItem)
     await stall.save()
-    
+
     return res.status(201).json({
       message: 'Menu item added successfully',
       data: stall
     })
   } catch (error) {
+    console.error('Add menu item error:', error)
     return res.status(400).json({
       message: 'Error adding menu item',
       error: error.message
