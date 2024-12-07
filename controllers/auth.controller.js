@@ -34,7 +34,7 @@ async function register(req, res) {
     }
 
     const allowedCreations = {
-      masterAdmin: ['recharger', 'stallAdmin', 'rechargerAdmin'],
+      masterAdmin: ['recharger', 'stallAdmin', 'rechargerAdmin', 'stallCashier'],
       rechargerAdmin: ['recharger'],
       stallAdmin: ['stallCashier'],
     }
