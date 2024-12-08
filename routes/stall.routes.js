@@ -47,6 +47,8 @@ router.put(
 )
 
 // Menu item routes
+router.get('/stall/:stallId/menu/:menuId', stallController.getMenuItem)
+
 router.post('/stall/:stallId/menu', authenticateUser, authorizeUser('stallAdmin'), upload.single('image'), stallController.addMenuItem)
 
 router.put('/stall/:stallId/menu/:menuId', authenticateUser, authorizeUser('stallAdmin'), upload.single('image'), stallController.updateMenuItem)

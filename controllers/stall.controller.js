@@ -20,21 +20,25 @@ async function createStall(req, res) {
     stallCashiers: Joi.string(),
     menu: Joi.string(),
     minimumOrderAmount: Joi.number().min(0).default(0),
+    description: Joi.string(),
+    category: Joi.string(),
     address: Joi.object({
       street: Joi.string().required(),
       area: Joi.string().required(),
       city: Joi.string().required(),
       postalCode: Joi.string(),
-    }).required(),
+    }),
+    tempAddress: Joi.string(),
+    tempDelivery: Joi.string(),
     deliveryTime: Joi.object({
       min: Joi.number().required(),
       max: Joi.number().required(),
-    }).required(),
+    }),
   })
 
   try {
     await stallValidationSchema.validateAsync(req.body, { abortEarly: false })
-    let { motherStall, stallAdmin, stallCashiers, menu, minimumOrderAmount, address, deliveryTime } = req.body
+    let { motherStall, stallAdmin, stallCashiers, menu, minimumOrderAmount, address, deliveryTime, description, category, tempAddress, tempDelivery } = req.body
 
     try {
       stallCashiers = stallCashiers ? JSON.parse(stallCashiers) : []
@@ -84,6 +88,10 @@ async function createStall(req, res) {
       bannerUrl,
       address,
       deliveryTime,
+      category,
+      description,
+      tempAddress,
+      tempDelivery
     })
 
     return res.status(201).json({
@@ -208,6 +216,7 @@ async function getAllStalls(req, res) {
           menu: 1,
           address: 1,
           deliveryTime: 1,
+          createdAt: 1,
           'stallAdminDetails._id': 1,
           'stallAdminDetails.name': 1,
           'stallAdminDetails.phone': 1,
@@ -557,6 +566,7 @@ async function getStall(req, res) {
           bannerUrl: 1,
           address: 1,
           deliveryTime: 1,
+          createdAt: 1,
           'stallAdminDetails._id': 1,
           'stallAdminDetails.name': 1,
           'stallAdminDetails.phone': 1,
@@ -649,6 +659,32 @@ async function getStallMenu(req, res) {
   } catch (error) {
     return res.status(400).json({
       message: 'Error retrieving menu',
+      error: error.message
+    })
+  }
+}
+
+async function getMenuItem(req, res) {
+  const { stallId, menuId } = req.params
+
+  try {
+    const stall = await Stall.findById(stallId)
+    if (!stall) {
+      return res.status(404).json({ message: 'Stall not found' })
+    }
+
+    const menuItem = stall.menu.id(menuId)
+    if (!menuItem) {
+      return res.status(404).json({ message: 'Menu item not found' })
+    }
+
+    return res.status(200).json({
+      message: 'Menu item retrieved successfully',
+      data: menuItem
+    })
+  } catch (error) {
+    return res.status(400).json({
+      message: 'Error retrieving menu item',
       error: error.message
     })
   }
@@ -942,210 +978,6 @@ async function removeMenuItem(req, res) {
   }
 }
 
-// async function getStall(req, res) {
-//   const { stallId } = req.params
-//   const today = new Date()
-//   today.setHours(0, 0, 0, 0)
-  
-//   try {
-//     const aggregation = await Stall.aggregate([
-//       { $match: { _id: new mongoose.Types.ObjectId(stallId) } },
-//       {
-//         $lookup: {
-//           from: 'orders',
-//           let: { stallId: '$_id', today: today },
-//           pipeline: [
-//             {
-//               $match: {
-//                 $expr: {
-//                   $and: [
-//                     { $eq: ['$stallId', '$$stallId'] },
-//                     { $gte: ['$orderDate', '$$today'] }
-//                   ],
-//                 },
-//               },
-//             },
-//             {
-//               $group: {
-//                 _id: null,
-//                 todayTotalOrderValue: { $sum: '$totalAmount' },
-//                 todayOrderCount: { $sum: 1 },
-//               },
-//             },
-//           ],
-//           as: 'todayOrdersInfo',
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: 'orders',
-//           localField: '_id',
-//           foreignField: 'stallId',
-//           as: 'lifetimeOrdersInfo',
-//         },
-//       },
-//       {
-//         $unwind: {
-//           path: '$todayOrdersInfo',
-//           preserveNullAndEmptyArrays: true
-//         },
-//       },
-//       {
-//         $addFields: {
-//           todayTotalOrderValue: {
-//             $ifNull: ['$todayOrdersInfo.todayTotalOrderValue', 0]
-//           },
-//           todayOrderCount: {
-//             $ifNull: ['$todayOrdersInfo.todayOrderCount', 0]
-//           },
-//           lifetimeTotalOrderValue: {
-//             $sum: '$lifetimeOrdersInfo.totalAmount'
-//           },
-//           lifetimeOrderCount: {
-//             $size: '$lifetimeOrdersInfo'
-//           },
-//         },
-//       },
-//       {
-//         $project: {
-//           todayOrdersInfo: 0,
-//           lifetimeOrdersInfo: 0,
-//         },
-//       },
-//     ])
-    
-//     if (aggregation.length === 0) {
-//       return res.status(404).json({ message: 'Stall not found' })
-//     }
-
-//     return res.status(200).json({
-//       message: 'Stall retrieved successfully',
-//       data: aggregation[0],
-//     })
-//   } catch (error) {
-//     return res.status(400).json({
-//       message: 'Error retrieving stall',
-//       error: error.message
-//     })
-//   }
-// }
-
-// async function getAllStalls(req, res) {
-//   try {
-//     const today = new Date()
-//     today.setHours(0, 0, 0, 0)
-
-//     const stalls = await Stall.aggregate([
-//       {
-//         $sort: { motherStall: 1 },
-//       },
-//       {
-//         $lookup: {
-//           from: 'users',
-//           localField: 'stallAdmin',
-//           foreignField: '_id',
-//           as: 'stallAdminDetails',
-//         },
-//       },
-//       {
-//         $unwind: {
-//           path: '$stallAdminDetails',
-//           preserveNullAndEmptyArrays: true,
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: 'orders',
-//           let: { stallId: '$_id', today: today },
-//           pipeline: [
-//             {
-//               $match: {
-//                 $expr: {
-//                   $and: [
-//                     { $eq: ['$stallId', '$$stallId'] },
-//                     { $gte: ['$orderDate', '$$today'] }
-//                   ],
-//                 },
-//               },
-//             },
-//             {
-//               $group: {
-//                 _id: null,
-//                 todayTotalOrderValue: { $sum: '$totalAmount' },
-//                 todayOrderCount: { $sum: 1 },
-//               },
-//             },
-//           ],
-//           as: 'todayOrders',
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: 'orders',
-//           let: { stallId: '$_id' },
-//           pipeline: [
-//             {
-//               $match: {
-//                 $expr: {
-//                   $eq: ['$stallId', '$$stallId'],
-//                 },
-//               },
-//             },
-//             {
-//               $group: {
-//                 _id: null,
-//                 lifetimeTotalOrderValue: { $sum: '$totalAmount' },
-//                 lifetimeOrderCount: { $sum: 1 },
-//               },
-//             },
-//           ],
-//           as: 'lifetimeOrders',
-//         },
-//       },
-//       {
-//         $addFields: {
-//           todayTotalOrderValue: {
-//             $ifNull: [{ $arrayElemAt: ['$todayOrders.todayTotalOrderValue', 0] }, 0]
-//           },
-//           todayOrderCount: {
-//             $ifNull: [{ $arrayElemAt: ['$todayOrders.todayOrderCount', 0] }, 0]
-//           },
-//           lifetimeTotalOrderValue: {
-//             $ifNull: [{ $arrayElemAt: ['$lifetimeOrders.lifetimeTotalOrderValue', 0] }, 0]
-//           },
-//           lifetimeOrderCount: {
-//             $ifNull: [{ $arrayElemAt: ['$lifetimeOrders.lifetimeOrderCount', 0] }, 0]
-//           },
-//         },
-//       },
-//       {
-//         $project: {
-//           motherStall: 1,
-//           imageUrl: 1,
-//           thumbnailUrl: 1,
-//           minimumOrderAmount: 1,
-//           'stallAdminDetails._id': 1,
-//           'stallAdminDetails.name': 1,
-//           'stallAdminDetails.phone': 1,
-//           todayTotalOrderValue: 1,
-//           todayOrderCount: 1,
-//           lifetimeTotalOrderValue: 1,
-//           lifetimeOrderCount: 1,
-//         },
-//       },
-//     ])
-
-//     return res.status(200).json({
-//       message: 'Stalls retrieved successfully',
-//       data: stalls
-//     })
-//   } catch (error) {
-//     return res.status(400).json({
-//       message: 'Error retrieving stalls',
-//       error: error.message
-//     })
-//   }
-// }
 
 module.exports = {
   createStall,
@@ -1153,6 +985,7 @@ module.exports = {
   getAllStalls,
   getAllStallsPublic,
   editStall,
+  getMenuItem,
   addMenuItem,
   updateMenuItem,
   removeMenuItem,
