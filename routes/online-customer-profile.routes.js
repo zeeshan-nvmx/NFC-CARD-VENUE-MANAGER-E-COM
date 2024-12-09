@@ -5,6 +5,7 @@ const onlineCustomerProfileController = require('../controllers/online-customer-
 const { authenticateOnlineCustomer } = require('../utils/authorize-authenticate')
 
 router.get('/online/profile', authenticateOnlineCustomer, onlineCustomerProfileController.getProfile)
+router.get('/online/customer/orders/:orderId', authenticateOnlineCustomer, onlineCustomerProfileController.getOrderDetails)
 router.put('/online/profile', authenticateOnlineCustomer, onlineCustomerProfileController.updateProfile)
 router.post('/online/address', authenticateOnlineCustomer, onlineCustomerProfileController.addAddress)
 router.put('/online/address', authenticateOnlineCustomer, onlineCustomerProfileController.updateAddress)

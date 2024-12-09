@@ -1,6 +1,7 @@
 // controllers/online-customer-profile.controller.js
 const Joi = require('joi')
 const Customer = require('../models/customer.model')
+const Order = require('../models/order.model')
 
 async function getProfile(req, res) {
   try {
@@ -19,6 +20,35 @@ async function getProfile(req, res) {
     })
   }
 }
+
+async function getOrderDetails(req, res) {
+  const { orderId } = req.params
+  const customerId = req.user.customerId
+
+  try {
+    const order = await Order.findOne({
+      _id: orderId,
+      customer: customerId,
+    })
+      .populate('stallId', 'motherStall imageUrl thumbnailUrl')
+      .populate('orderServedBy', 'name phone')
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' })
+    }
+
+    return res.status(200).json({
+      message: 'Order retrieved successfully',
+      data: order,
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Failed to retrieve order details',
+      error: error.message,
+    })
+  }
+}
+
 
 async function updateProfile(req, res) {
   const schema = Joi.object({
@@ -190,6 +220,7 @@ async function deleteAddress(req, res) {
 
 module.exports = {
   getProfile,
+  getOrderDetails,
   updateProfile,
   addAddress,
   updateAddress,
