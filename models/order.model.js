@@ -128,7 +128,7 @@ const orderSchema = new mongoose.Schema(
     orderItems: [orderItemSchema],
     totalAmount: { type: Number, required: true },
     vat: { type: Number, default: 0},
-    orderServedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    orderServedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     orderType: {
       type: String,
       enum: ['nfc', 'online'],
