@@ -21,8 +21,12 @@ async function createOrder(req, res) {
     orderItems: Joi.array().items(orderItemSchema).required(),
     totalAmount: Joi.number().required(),
     vat: Joi.number().required(),
-    orderServedBy: Joi.string().required(),
     orderType: Joi.string().valid('nfc', 'online').required(),
+    orderServedBy: Joi.string().when('orderType', {
+        is: 'nfc',
+        then: Joi.required(),
+        otherwise: Joi.forbidden()
+    }),
     paymentMethod: Joi.string().valid('NFC', 'COD', 'SSLCOMMERZ').required(),
     deliveryAddress: Joi.when('orderType', {
       is: 'online',
