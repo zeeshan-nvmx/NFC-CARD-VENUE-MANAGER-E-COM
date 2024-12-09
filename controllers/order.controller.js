@@ -8,6 +8,171 @@ const axios = require('axios')
 const Joi = require('joi')
 const { initiatePayment, validatePayment } = require('../utils/sslcommerz')
 
+// async function createOrder(req, res) {
+//   const orderItemSchema = Joi.object({
+//     foodName: Joi.string().required(),
+//     quantity: Joi.number().integer().min(1).required(),
+//     foodPrice: Joi.number().min(0).required(),
+//   })
+
+//   const orderSchema = Joi.object({
+//     customer: Joi.string().required(),
+//     stallId: Joi.string().required(),
+//     orderItems: Joi.array().items(orderItemSchema).required(),
+//     totalAmount: Joi.number().required(),
+//     vat: Joi.number().required(),
+//     orderType: Joi.string().valid('nfc', 'online').required(),
+//     orderServedBy: Joi.string().when('orderType', {
+//         is: 'nfc',
+//         then: Joi.required(),
+//         otherwise: Joi.forbidden()
+//     }),
+//     paymentMethod: Joi.string().valid('NFC', 'COD', 'SSLCOMMERZ').required(),
+//     deliveryAddress: Joi.when('orderType', {
+//       is: 'online',
+//       then: Joi.object({
+//         street: Joi.string().required(),
+//         area: Joi.string().required(),
+//         city: Joi.string().required(),
+//         postalCode: Joi.string(),
+//         deliveryInstructions: Joi.string(),
+//       }).required(),
+//       otherwise: Joi.forbidden(),
+//     }),
+//     deliveryFee: Joi.when('orderType', {
+//       is: 'online',
+//       then: Joi.number().min(0).required(),
+//       otherwise: Joi.forbidden(),
+//     }),
+//   })
+
+//   try {
+//     await orderSchema.validateAsync(req.body, { abortEarly: false })
+//     const { customer, stallId, orderItems, totalAmount, vat, orderServedBy, orderType, paymentMethod, deliveryAddress, deliveryFee = 0 } = req.body
+
+//     const customerDetails = await Customer.findById(customer)
+//     if (!customerDetails) {
+//       return res.status(404).json({ message: 'Customer not found' })
+//     }
+
+//     const stallDetails = await Stall.findById(stallId)
+//     if (!stallDetails) {
+//       return res.status(404).json({ message: 'Stall not found' })
+//     }
+
+//     // Validate minimum order amount for online orders
+//     if (orderType === 'online' && totalAmount < stallDetails.minimumOrderAmount) {
+//       return res.status(400).json({
+//         message: `Minimum order amount is ${stallDetails.minimumOrderAmount}`,
+//       })
+//     }
+
+//     // Check stock availability
+//     let insufficientStockItem = ''
+//     for (const orderItem of orderItems) {
+//       const menuItem = stallDetails.menu.find((item) => item.foodName === orderItem.foodName)
+//       if (!menuItem || menuItem.currentStock < orderItem.quantity) {
+//         insufficientStockItem = orderItem.foodName
+//         break
+//       }
+//     }
+
+//     if (insufficientStockItem) {
+//       return res.status(400).json({
+//         message: `Insufficient stock of ${insufficientStockItem}`,
+//       })
+//     }
+
+//     const finalAmount = totalAmount + (orderType === 'online' ? deliveryFee : 0)
+
+//     // Handle NFC payment
+//     if (paymentMethod === 'NFC') {
+//       if (customerDetails.moneyLeft < finalAmount) {
+//         return res.status(400).json({
+//           message: 'Insufficient funds in NFC card',
+//         })
+//       }
+
+//       customerDetails.moneyLeft -= finalAmount
+//       await customerDetails.save()
+//     }
+
+//     // Deduct stock
+//     for (const orderItem of orderItems) {
+//       const menuItem = stallDetails.menu.find((item) => item.foodName === orderItem.foodName)
+//       menuItem.currentStock -= orderItem.quantity
+//     }
+//     await stallDetails.save()
+
+//     const orderData = {
+//       customer,
+//       stallId,
+//       orderItems,
+//       totalAmount: finalAmount,
+//       vat,
+//       orderServedBy,
+//       orderType,
+//       paymentMethod,
+//       orderStatus: paymentMethod === 'COD' ? 'PENDING' : 'CONFIRMED',
+//       paymentStatus: paymentMethod === 'NFC' ? 'PAID' : 'PENDING',
+//     }
+
+//     if (orderType === 'online') {
+//       orderData.deliveryAddress = deliveryAddress
+//       orderData.deliveryFee = deliveryFee
+//     }
+
+//     const newOrder = await Order.create(orderData)
+
+//     // If payment method is SSL Commerz, initiate payment
+//     if (paymentMethod === 'SSLCOMMERZ') {
+//       const successUrl = `${process.env.BASE_URL}/api/orders/payment/success`
+//       const failUrl = `${process.env.BASE_URL}/api/orders/payment/fail`
+//       const cancelUrl = `${process.env.BASE_URL}/api/orders/payment/cancel`
+
+//       const paymentInit = await initiatePayment(newOrder, customerDetails, successUrl, failUrl, cancelUrl)
+
+//       if (!paymentInit.success) {
+//         return res.status(400).json({
+//           message: 'Payment initiation failed',
+//           error: paymentInit.error,
+//         })
+//       }
+
+//       return res.status(201).json({
+//         message: 'Order created and payment initiated',
+//         paymentUrl: paymentInit.redirectGatewayURL,
+//         order: newOrder,
+//       })
+//     }
+
+//     // Send SMS notification
+//     const itemsDescription = orderItems.map((item) => `${item.quantity} x ${item.foodName}`).join(', ')
+
+//     const message =
+//       orderType === 'nfc'
+//         ? `Order confirmed. Amount: ${finalAmount}, Items: ${itemsDescription}, Balance: ${customerDetails.moneyLeft}`
+//         : `Order confirmed. Amount: ${finalAmount}, Items: ${itemsDescription}. Payment: ${paymentMethod}`
+
+//     const greenwebsms = new URLSearchParams()
+//     greenwebsms.append('token', process.env.BDBULKSMS_TOKEN)
+//     greenwebsms.append('to', customerDetails.phone)
+//     greenwebsms.append('message', message)
+//     await axios.post('https://api.greenweb.com.bd/api.php', greenwebsms)
+
+//     return res.status(201).json({
+//       message: 'Order created successfully',
+//       order: newOrder,
+//     })
+//   } catch (error) {
+//     console.error(error)
+//     return res.status(400).json({
+//       message: 'Order creation failed',
+//       error: error.message,
+//     })
+//   }
+// }
+
 async function createOrder(req, res) {
   const orderItemSchema = Joi.object({
     foodName: Joi.string().required(),
@@ -35,20 +200,31 @@ async function createOrder(req, res) {
         area: Joi.string().required(),
         city: Joi.string().required(),
         postalCode: Joi.string(),
-        deliveryInstructions: Joi.string(),
+        deliveryInstructions: Joi.string()
       }).required(),
-      otherwise: Joi.forbidden(),
+      otherwise: Joi.forbidden()
     }),
     deliveryFee: Joi.when('orderType', {
       is: 'online',
       then: Joi.number().min(0).required(),
-      otherwise: Joi.forbidden(),
-    }),
+      otherwise: Joi.forbidden()
+    })
   })
 
   try {
     await orderSchema.validateAsync(req.body, { abortEarly: false })
-    const { customer, stallId, orderItems, totalAmount, vat, orderServedBy, orderType, paymentMethod, deliveryAddress, deliveryFee = 0 } = req.body
+    const { 
+      customer, 
+      stallId, 
+      orderItems, 
+      totalAmount, 
+      vat, 
+      orderServedBy,
+      orderType,
+      paymentMethod,
+      deliveryAddress,
+      deliveryFee = 0
+    } = req.body
 
     const customerDetails = await Customer.findById(customer)
     if (!customerDetails) {
@@ -62,15 +238,15 @@ async function createOrder(req, res) {
 
     // Validate minimum order amount for online orders
     if (orderType === 'online' && totalAmount < stallDetails.minimumOrderAmount) {
-      return res.status(400).json({
-        message: `Minimum order amount is ${stallDetails.minimumOrderAmount}`,
+      return res.status(400).json({ 
+        message: `Minimum order amount is ${stallDetails.minimumOrderAmount}` 
       })
     }
 
     // Check stock availability
     let insufficientStockItem = ''
     for (const orderItem of orderItems) {
-      const menuItem = stallDetails.menu.find((item) => item.foodName === orderItem.foodName)
+      const menuItem = stallDetails.menu.find(item => item.foodName === orderItem.foodName)
       if (!menuItem || menuItem.currentStock < orderItem.quantity) {
         insufficientStockItem = orderItem.foodName
         break
@@ -78,8 +254,8 @@ async function createOrder(req, res) {
     }
 
     if (insufficientStockItem) {
-      return res.status(400).json({
-        message: `Insufficient stock of ${insufficientStockItem}`,
+      return res.status(400).json({ 
+        message: `Insufficient stock of ${insufficientStockItem}` 
       })
     }
 
@@ -88,8 +264,8 @@ async function createOrder(req, res) {
     // Handle NFC payment
     if (paymentMethod === 'NFC') {
       if (customerDetails.moneyLeft < finalAmount) {
-        return res.status(400).json({
-          message: 'Insufficient funds in NFC card',
+        return res.status(400).json({ 
+          message: 'Insufficient funds in NFC card' 
         })
       }
 
@@ -99,7 +275,7 @@ async function createOrder(req, res) {
 
     // Deduct stock
     for (const orderItem of orderItems) {
-      const menuItem = stallDetails.menu.find((item) => item.foodName === orderItem.foodName)
+      const menuItem = stallDetails.menu.find(item => item.foodName === orderItem.foodName)
       menuItem.currentStock -= orderItem.quantity
     }
     await stallDetails.save()
@@ -114,7 +290,7 @@ async function createOrder(req, res) {
       orderType,
       paymentMethod,
       orderStatus: paymentMethod === 'COD' ? 'PENDING' : 'CONFIRMED',
-      paymentStatus: paymentMethod === 'NFC' ? 'PAID' : 'PENDING',
+      paymentStatus: paymentMethod === 'NFC' ? 'PAID' : 'PENDING'
     }
 
     if (orderType === 'online') {
@@ -124,35 +300,53 @@ async function createOrder(req, res) {
 
     const newOrder = await Order.create(orderData)
 
+    // Add order to customer's order history
+    await Customer.findByIdAndUpdate(customer, {
+      $push: {
+        orderHistory: {
+          orderId: newOrder._id,
+          totalAmount: finalAmount,
+          orderServedBy
+        }
+      }
+    })
+
     // If payment method is SSL Commerz, initiate payment
     if (paymentMethod === 'SSLCOMMERZ') {
       const successUrl = `${process.env.BASE_URL}/api/orders/payment/success`
       const failUrl = `${process.env.BASE_URL}/api/orders/payment/fail`
       const cancelUrl = `${process.env.BASE_URL}/api/orders/payment/cancel`
 
-      const paymentInit = await initiatePayment(newOrder, customerDetails, successUrl, failUrl, cancelUrl)
+      const paymentInit = await initiatePayment(
+        newOrder,
+        customerDetails,
+        successUrl,
+        failUrl,
+        cancelUrl
+      )
 
       if (!paymentInit.success) {
-        return res.status(400).json({
-          message: 'Payment initiation failed',
-          error: paymentInit.error,
+        return res.status(400).json({ 
+          message: 'Payment initiation failed', 
+          error: paymentInit.error 
         })
       }
 
       return res.status(201).json({
         message: 'Order created and payment initiated',
         paymentUrl: paymentInit.redirectGatewayURL,
-        order: newOrder,
+        order: newOrder
       })
     }
 
     // Send SMS notification
-    const itemsDescription = orderItems.map((item) => `${item.quantity} x ${item.foodName}`).join(', ')
-
-    const message =
-      orderType === 'nfc'
-        ? `Order confirmed. Amount: ${finalAmount}, Items: ${itemsDescription}, Balance: ${customerDetails.moneyLeft}`
-        : `Order confirmed. Amount: ${finalAmount}, Items: ${itemsDescription}. Payment: ${paymentMethod}`
+    const itemsDescription = orderItems
+      .map(item => `${item.quantity} x ${item.foodName}`)
+      .join(', ')
+    
+    const message = orderType === 'nfc' 
+      ? `Order confirmed. Amount: ${finalAmount}, Items: ${itemsDescription}, Balance: ${customerDetails.moneyLeft}`
+      : `Order confirmed. Amount: ${finalAmount}, Items: ${itemsDescription}. Payment: ${paymentMethod}`
 
     const greenwebsms = new URLSearchParams()
     greenwebsms.append('token', process.env.BDBULKSMS_TOKEN)
@@ -162,13 +356,14 @@ async function createOrder(req, res) {
 
     return res.status(201).json({
       message: 'Order created successfully',
-      order: newOrder,
+      order: newOrder
     })
+
   } catch (error) {
     console.error(error)
-    return res.status(400).json({
-      message: 'Order creation failed',
-      error: error.message,
+    return res.status(400).json({ 
+      message: 'Order creation failed', 
+      error: error.message 
     })
   }
 }
