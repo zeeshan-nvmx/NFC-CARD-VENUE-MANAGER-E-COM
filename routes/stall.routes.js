@@ -48,12 +48,12 @@ router.put(
 
 // Menu item routes
 
-router.post('/stall/:stallId/menu', authenticateUser, authorizeUser('stallAdmin'), upload.single('image'), stallController.addMenuItem)
+router.post('/stall/:stallId/menu', authenticateUser, authorizeUser('stallAdmin', 'masterAdmin'), upload.single('image'), stallController.addMenuItem)
 
 router.get('/stall/:stallId/menu/:menuId', stallController.getMenuItem)
 
-router.put('/stall/:stallId/menu/:menuId', authenticateUser, authorizeUser('stallAdmin'), upload.single('image'), stallController.updateMenuItem)
+router.put('/stall/:stallId/menu/:menuId', authenticateUser, authorizeUser('stallAdmin', 'masterAdmin'), upload.single('image'), stallController.updateMenuItem)
 
-router.delete('/stall/:stallId/menu/:menuId', authenticateUser, authorizeUser('stallAdmin'), stallController.removeMenuItem)
+router.delete('/stall/:stallId/menu/:menuId', authenticateUser, authorizeUser('stallAdmin', 'masterAdmin'), stallController.removeMenuItem)
 
 module.exports = router
